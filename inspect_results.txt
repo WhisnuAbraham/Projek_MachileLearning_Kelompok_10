@@ -1,0 +1,1258 @@
+=== Cell 0 (code) ===
+pip install pandas numpy matplotlib seaborn scikit-learn imbalanced-learn xgboost
+--------------------------------------------------
+=== Cell 1 (code) ===
+import os
+import warnings
+import joblib
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import xgboost as xgb
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder, OneHotEncoder
+from sklearn.decomposition import PCA
+
+from sklearn.metrics import (
+    accuracy_score, 
+    f1_score, 
+    precision_score, 
+    recall_score, 
+    roc_auc_score, 
+    classification_report, 
+    confusion_matrix, 
+    ConfusionMatrixDisplay,
+    roc_curve
+)
+from imblearn.over_sampling import SMOTE
+from IPython.display import display
+from google.colab import drive
+
+warnings.filterwarnings('ignore')
+print("Semua library berhasil diimport!")
+--------------------------------------------------
+=== Cell 2 (code) ===
+drive.mount('/content/drive')
+
+df = pd.read_csv('/content/drive/MyDrive/PA 3 KEL 10-20260406T061058Z-3-001/PA 3 KEL 10/ML/diabetes_dataset.csv')
+print("Dataset berhasil dimuat")
+print(f"Jumlah baris: {df.shape[0]}")
+print(f"Jumlah kolom: {df.shape[1]}")
+df.head()
+--------------------------------------------------
+=== Cell 3 (markdown) ===
+eksplorasi data (EDA)
+--------------------------------------------------
+=== Cell 4 (code) ===
+print("INFORMASI STRUKTUR DATASET")
+df.info()
+print("\nSTATISTIK DESKRIPTIF")
+print(df.describe())
+print("\nJUMLAH MISSING VALUE")
+print(df.isnull().sum())
+print(f"\nTotal keseluruhan missing value di dataset: {df.isnull().sum().sum()}")
+print("\nDISTRIBUSI LABEL (KOLOM 'diabetes')")
+print(df['diabetes'].value_counts())
+print("\nPersentase Distribusi Label:")
+print(df['diabetes'].value_counts(normalize=True) * 100)
+--------------------------------------------------
+=== Cell 5 (code) ===
+print(df.isnull().sum())
+--------------------------------------------------
+=== Cell 6 (code) ===
+print("PENGECEKAN JUMLAH OUTLIER (METODE IQR)")
+outlier_cols = []
+numeric_cols = ['age', 'bmi', 'hbA1c_level', 'blood_glucose_level']
+
+for col in numeric_cols:
+    Q1 = df[col].quantile(0.25)
+    Q3 = df[col].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    
+    #jumlah data outlier
+    outliers = df[(df[col] < lower_bound) | (df[col] > upper_bound)]
+    n_outliers = len(outliers)
+    pct_outliers = (n_outliers / len(df)) * 100
+    
+    print(f"Kolom '{col}': {n_outliers} baris outlier ({pct_outliers:.2f}%)")
+    
+    if n_outliers > 0:
+        outlier_cols.append(col)
+
+print("\nVISUALISASI BOXPLOT KOLOM DENGAN OUTLIER")
+if outlier_cols:
+    plt.figure(figsize=(14, 10))
+    for i, col in enumerate(outlier_cols, 1):
+        plt.subplot(2, 2, i)
+        sns.boxplot(x=df[col], color='skyblue')
+        plt.title(f"Boxplot of {col} (Menampilkan Outlier)", fontsize=12)
+        plt.xlabel(col, fontsize=10)
+    plt.tight_layout()
+    plt.show()
+else:
+    print("Tidak ditemukan kolom numerik yang memiliki outlier.")
+
+--------------------------------------------------
+=== Cell 7 (code) ===
+print("DISTRIBUSI LABEL diabetes")
+counts = df['diabetes'].value_counts()
+print(counts)
+print("\nPersentase:")
+print(df['diabetes'].value_counts(normalize=True) * 100)
+
+plt.figure(figsize=(14, 6))
+
+plt.subplot(1, 2, 1)
+plt.pie(counts, labels=['Tidak Diabetes (0)', 'Diabetes (1)'], autopct='%1.1f%%', 
+        startangle=140, colors=['#66b3ff', '#ff9999'], explode=(0, 0.1), shadow=True)
+plt.title("Persentase Distribusi Kelas", fontsize=14, pad=15)
+
+plt.subplot(1, 2, 2)
+ax = sns.countplot(x='diabetes', data=df, palette=['#66b3ff', '#ff9999'])
+plt.title("Jumlah Pasien per Kelas", fontsize=14, pad=15)
+plt.xlabel("Status Diabetes (0 = Tidak, 1 = Ya)", fontsize=12)
+plt.ylabel("Jumlah Pasien", fontsize=12)
+plt.xticks([0, 1], ['Tidak Diabetes (0)', 'Diabetes (1)'])
+
+for p in ax.patches:
+    ax.annotate(f'{int(p.get_height()):,}', (p.get_x() + p.get_width() / 2., p.get_height()),
+                ha='center', va='bottom', fontsize=11, color='black', xytext=(0, 5),
+                textcoords='offset points')
+
+plt.tight_layout()
+plt.show()
+
+--------------------------------------------------
+=== Cell 8 (code) ===
+print("KATEGORI RIWAYAT MEROKOK ('smoking_history')")
+print("Kategori Unik:", df['smoking_history'].unique())
+print("\nJumlah Pasien per Kategori:")
+print(df['smoking_history'].value_counts())
+
+print("\nEKSPLORASI PASIEN ANAK (USIA < 10 TAHUN)")
+df_kids = df[df['age'] < 10]
+print(f"Total pasien anak di bawah 10 tahun: {len(df_kids)} baris ({len(df_kids)/len(df)*100:.2f}% dari total dataset)")
+display(df_kids.head())
+plt.figure(figsize=(16, 6))
+
+#Bar Chart Riwayat Merokok Keseluruhan
+plt.subplot(1, 2, 1)
+ax1 = sns.countplot(y='smoking_history', data=df, order=df['smoking_history'].value_counts().index, palette='viridis')
+plt.title("Distribusi Riwayat Merokok", fontsize=14, pad=15)
+plt.xlabel("Jumlah Pasien", fontsize=12)
+plt.ylabel("Kategori Merokok", fontsize=12)
+
+for p in ax1.patches:
+    ax1.annotate(f'{int(p.get_width()):,}', (p.get_width(), p.get_y() + p.get_height() / 2.),
+                 ha='left', va='center', fontsize=11, color='black', xytext=(5, 0),
+                 textcoords='offset points')
+
+#Distribusi Usia Pasien Anak (< 10 Tahun)
+plt.subplot(1, 2, 2)
+sns.histplot(df_kids['age'], bins=10, kde=True, color='#ff9999', edgecolor='black')
+plt.title("Distribusi Usia Pasien Anak (< 10 Tahun)", fontsize=14, pad=15)
+plt.xlabel("Usia (Tahun)", fontsize=12)
+plt.ylabel("Jumlah Pasien Anak", fontsize=12)
+
+plt.tight_layout()
+plt.show()
+
+--------------------------------------------------
+=== Cell 9 (markdown) ===
+# Preprocessing: Noise, Outlier, dan Data Imbalance
+--------------------------------------------------
+=== Cell 10 (markdown) ===
+Handle Noise mengisi NaN dengan modus:
+--------------------------------------------------
+=== Cell 11 (code) ===
+print("DATA NOISE PADA KOLOM 'gender'")
+noise_gender = df[df['gender'] == 'Other']
+print(f"Jumlah baris dengan gender 'Other': {len(noise_gender)}")
+print("\nDetail baris noise:")
+print(noise_gender[['gender', 'age', 'smoking_history', 'diabetes']].to_string())
+mode_gender = df[df['gender'] != 'Other']['gender'].mode()[0]
+print(f"\nModus gender (yang akan digunakan untuk imputasi): '{mode_gender}'")
+df['gender'] = df['gender'].replace('Other', mode_gender)
+remaining = (df['gender'] == 'Other').sum()
+print(f"\nJumlah 'Other' setelah imputasi : {remaining}")
+print(f"Status Imputasi                 : {'BERHASIL' if remaining == 0 else 'GAGAL'}")
+print("\nDistribusi gender setelah imputasi:")
+print(df['gender'].value_counts())
+--------------------------------------------------
+=== Cell 12 (code) ===
+no_info_count = (df['smoking_history'] == 'No Info').sum()
+
+mode_value = df[df['smoking_history'] != 'No Info']['smoking_history'].mode()[0]
+
+print(f"PROSES IMPUTASI KOLOM 'smoking_history")
+print(f"Jumlah baris 'No Info' sebelum imputasi : {no_info_count}")
+print(f"Modus yang digunakan : '{mode_value}'")
+
+# Melakukan penggantian (imputasi)
+df['smoking_history'] = df['smoking_history'].replace('No Info', mode_value)
+
+#Verifikasi setelah imputasi
+no_info_remaining = (df['smoking_history'] == 'No Info').sum()
+print(f"Jumlah baris 'No Info' setelah imputasi   : {no_info_remaining}")
+
+--------------------------------------------------
+=== Cell 13 (code) ===
+# bar chart dari hasil value_counts
+df['smoking_history'].value_counts().plot(kind='bar', color='skyblue', edgecolor='black')
+
+plt.title('Distribusi Riwayat Merokok')
+plt.xlabel('Kategori Riwayat Merokok')
+plt.ylabel('Jumlah Pasien/Data')
+plt.xticks(rotation=45)
+
+plt.show()
+--------------------------------------------------
+=== Cell 14 (markdown) ===
+Handle Outlier (menggunakan IQR pada kolom numerik)
+--------------------------------------------------
+=== Cell 15 (code) ===
+def batasi_nilai_iqr(data, column, min_val=None, max_val=None):
+    Q1 = data[column].quantile(0.25)
+    Q3 = data[column].quantile(0.75)
+    IQR = Q3 - Q1
+    lower = Q1 - 1.5 * IQR
+    upper = Q3 + 1.5 * IQR
+    if min_val is not None:
+        lower = max(lower, min_val)
+    if max_val is not None:
+        upper = min(upper, max_val)
+
+    jumlah_outlier = ((data[column] < lower) | (data[column] > upper)).sum()
+    data[column] = data[column].clip(lower=lower, upper=upper)
+
+    print(f" Kolom '{column}'")
+    print(f" Batas bawah : {lower:.2f} | Batas atas : {upper:.2f}")
+    print(f" Nilai ekstrem yang dibatasi : {jumlah_outlier} baris")
+    return data
+
+print("PENANGANAN OUTLIER (PEMBATASAN NILAI / IQR)")
+print(f"Jumlah baris sebelum : {len(df)}")
+print("-" * 52)
+
+df = batasi_nilai_iqr(df, 'age', min_val=0)
+print("-" * 52)
+
+df = batasi_nilai_iqr(df, 'bmi', min_val=10)
+print("-" * 52)
+
+df = batasi_nilai_iqr(df, 'hbA1c_level')
+print("-" * 52)
+df = batasi_nilai_iqr(df, 'blood_glucose_level')
+print("-" * 52)
+
+print(f"Jumlah baris sesudah : {len(df)}")
+print("Status : SELESAI - Nilai ekstrem berhasil dibatasi")
+
+--------------------------------------------------
+=== Cell 16 (markdown) ===
+Handle Data Imbalance dengan metode smote
+--------------------------------------------------
+=== Cell 17 (code) ===
+# Encode kolom kategorikal ke angka
+df_encoded = df.copy()
+le = LabelEncoder()
+kolom_kategorikal = df_encoded.select_dtypes(include=['object']).columns
+print("Kolom yang di-encode:", list(kolom_kategorikal))
+for col in kolom_kategorikal:
+    df_encoded[col] = le.fit_transform(df_encoded[col])
+print("Tipe data setelah encoding:")
+print(df_encoded.dtypes)
+X = df_encoded.drop(columns=['diabetes'])
+y = df_encoded['diabetes']
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+# distribusi sebelum SMOTE
+print("Sebelum SMOTE (data training):")
+print(y_train.value_counts())
+rasio = y_train.value_counts()[0] / y_train.value_counts()[1]
+print("Rasio imbalance : {:.1f}x".format(rasio))
+smote = SMOTE(random_state=42)
+X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
+# distribusi sesudah SMOTE
+print("\nSesudah SMOTE (data training):")
+print(pd.Series(y_train_smote).value_counts())
+print("Status : SELESAI - Kelas sudah seimbang")
+--------------------------------------------------
+=== Cell 18 (markdown) ===
+# Scaling, dan Dimensionality Reduction
+--------------------------------------------------
+=== Cell 19 (markdown) ===
+Scaling/Normalisasi (StandardScaler untuk numerik)
+--------------------------------------------------
+=== Cell 20 (code) ===
+print(df_encoded.dtypes)
+--------------------------------------------------
+=== Cell 21 (code) ===
+X = df_encoded.drop(columns=['diabetes'])
+y = df_encoded['diabetes']
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+# Scaling
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)  
+# PCA (Dimensionality Reduction)
+do_pca = True 
+if do_pca:
+    pca = PCA(n_components=0.95, random_state=42) 
+    X_train_pca = pca.fit_transform(X_train_scaled)
+    X_test_pca = pca.transform(X_test_scaled)  
+    
+    print(f"PCA Selesai: Fitur berkurang dari {X_train.shape[1]} kolom menjadi {X_train_pca.shape[1]} kolom (Principal Components)")
+else:
+    X_train_pca = X_train_scaled
+    X_test_pca = X_test_scaled
+# SMOTE
+smote = SMOTE(random_state=42)
+X_train_final, y_train_final = smote.fit_resample(X_train_pca, y_train)
+print("\nDISTRIBUSI KELAS")
+print("Sesudah SMOTE (y_train_final):")
+print(y_train_final.value_counts())
+print("\nStatus: SELESAI ")
+--------------------------------------------------
+=== Cell 22 (markdown) ===
+# Modeling
+--------------------------------------------------
+=== Cell 23 (code) ===
+print("MEMULAI PELATIHAN MODEL RANDOM FOREST")
+# Inisialisasi Model
+rf = RandomForestClassifier(random_state=42)
+# Latih model menggunakan data training yang SUDAH di-SMOTE
+rf.fit(X_train_final, y_train_final)
+y_pred_rf = rf.predict(X_test_pca)
+# Evaluasi Hasil
+print('Confusion Matrix:')
+print(confusion_matrix(y_test, y_pred_rf))
+print('\nClassification Report:')
+print(classification_report(y_test, y_pred_rf))
+print('Akurasi:', accuracy_score(y_test, y_pred_rf))
+--------------------------------------------------
+=== Cell 24 (code) ===
+print("PELATIHAN MODEL RANDOM FOREST")
+rf = RandomForestClassifier(random_state=42)
+rf.fit(X_train_final, y_train_final)
+
+y_pred = rf.predict(X_test_pca)
+
+# Evaluasi Matrix
+print('Confusion Matrix (Threshold 0.5):')
+print(confusion_matrix(y_test, y_pred))
+print('\nClassification Report (Threshold 0.5):')
+print(classification_report(y_test, y_pred))
+print(f'Akurasi : {accuracy_score(y_test, y_pred):.4f}')
+print(f'ROC AUC : {roc_auc_score(y_test, rf.predict_proba(X_test_pca)[:,1]):.4f}')
+
+# TUNING THRESHOLD PREDIKSI 
+y_proba = rf.predict_proba(X_test_pca)[:,1]
+best_recall = 0
+best_thresh = 0.5
+
+for thresh in np.arange(0.1, 0.9, 0.01):
+    y_pred_thresh = (y_proba >= thresh).astype(int)
+    recall_1 = recall_score(y_test, y_pred_thresh, pos_label=1)
+    if recall_1 > best_recall:
+        best_recall = recall_1
+        best_thresh = thresh
+
+print(f'Threshold terbaik untuk mendeteksi Diabetes (Kelas 1): {best_thresh:.2f} (Recall = {best_recall:.2f})')
+y_pred_best = (y_proba >= best_thresh).astype(int)
+print(f'\nClassification Report, Threshold {best_thresh:.2f}):')
+print(classification_report(y_test, y_pred_best))
+
+--------------------------------------------------
+=== Cell 25 (markdown) ===
+### 1. Feature Selection (Random Forest Feature Importance)
+--------------------------------------------------
+=== Cell 26 (code) ===
+print("ANALISIS FEATURE IMPORTANCE")
+importances = rf.feature_importances_
+feature_names = [f'PC{i+1}' for i in range(len(importances))]
+feat_imp = pd.Series(importances, index=feature_names).sort_values(ascending=False)
+print('Skor Kepentingan Fitur (Principal Components):')
+print(feat_imp.to_string())
+plt.figure(figsize=(12, 6))
+sns.barplot(x=feat_imp.values, y=feat_imp.index, palette='viridis')
+plt.title('Tingkat Kepentingan Komponen PCA - Random Forest', fontsize=14)
+plt.xlabel('Importance Score')
+plt.ylabel('Principal Component')
+plt.tight_layout()
+plt.show()
+plt.show()
+
+
+--------------------------------------------------
+=== Cell 27 (markdown) ===
+### 2A. Model Sebelum Tuning (Baseline Performance)
+--------------------------------------------------
+=== Cell 28 (code) ===
+print("MODEL BASELINE (Random Forest - Sebelum Tuning)")
+y_pred_baseline = rf.predict(X_test_pca)
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, y_pred_baseline))
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred_baseline))
+print(f"Akurasi  : {accuracy_score(y_test, y_pred_baseline):.4f}")
+print(f"ROC AUC  : {roc_auc_score(y_test, rf.predict_proba(X_test_pca)[:,1]):.4f}")
+cv_scores = cross_val_score(rf, X_train_final, y_train_final, cv=3, scoring='accuracy')
+print(f"CV Accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
+
+--------------------------------------------------
+=== Cell 29 (markdown) ===
+### 2B. Hyperparameter Tuning (Metode: GridSearchCV)
+--------------------------------------------------
+=== Cell 30 (code) ===
+print("HYPERPARAMETER TUNING (Metode: GridSearchCV)")
+param_grid = {
+    'n_estimators': [100, 200],
+    'max_depth': [10, 20, None],
+    'min_samples_split': [2, 5]
+}
+rf_grid = RandomForestClassifier(random_state=42)
+grid_search = GridSearchCV(
+    estimator=rf_grid, 
+    param_grid=param_grid, 
+    cv=3, 
+    scoring='f1',    
+    n_jobs=-1,      
+    verbose=1
+)
+print("Mulai melatih\n")
+grid_search.fit(X_train_final, y_train_final)
+print("\n" + "="*60)
+print("HASIL TUNING :")
+print("="*60)
+print(f"Kombinasi Parameter Terbaik : {grid_search.best_params_}")
+print(f"F1-Score Terbaik            : {grid_search.best_score_:.4f}\n")
+best_rf_model = grid_search.best_estimator_
+
+--------------------------------------------------
+=== Cell 31 (markdown) ===
+### 2C. Model Setelah Tuning (Tuned Performance) & Comparison
+--------------------------------------------------
+=== Cell 32 (code) ===
+print("TUNED MODEL PERFORMANCE")
+best_rf = grid_search.best_estimator_
+y_pred_tuned = best_rf.predict(X_test_pca)
+tuned_accuracy = accuracy_score(y_test, y_pred_tuned)
+print(f"Test Accuracy (Tuned): {tuned_accuracy:.4f}")
+print(f"\nConfusion Matrix (Tuned):")
+print(confusion_matrix(y_test, y_pred_tuned))
+print(f"\nClassification Report (Tuned):")
+print(classification_report(y_test, y_pred_tuned))
+print("\n" + "="*60)
+print("PERBANDINGAN: BASELINE vs TUNED MODEL")
+print("="*60)
+y_pred_baseline = rf.predict(X_test_pca)
+baseline_accuracy = accuracy_score(y_test, y_pred_baseline)
+improvement = ((tuned_accuracy - baseline_accuracy) / baseline_accuracy) * 100
+print(f"Baseline Accuracy :  {baseline_accuracy:.4f}")
+print(f"Tuned Accuracy    :  {tuned_accuracy:.4f}")
+print(f"Improvement       :  {improvement:+.2f}%")
+print("="*60)
+--------------------------------------------------
+=== Cell 33 (markdown) ===
+## Analisis Error, Interpretasi, dan Simpan Model
+Tahapan lanjutan setelah training dan tuning:
+1. Analisis error (misclassifications) dan visualisasi confusion matrix.
+2. Interpretasi feature importance lebih detail.
+3. Simpan model terbaik untuk prediksi ke depan.
+--------------------------------------------------
+=== Cell 34 (code) ===
+print("     ANALISIS AKHIR & PENYIMPANAN MODEL     ")
+misclassified_idx = np.where(y_test != y_pred_tuned)[0]
+print(f'Jumlah salah tebak: {len(misclassified_idx)} dari {len(y_test)} pasien ujian')
+print('\nContoh 5 pasien yang salah ditebak oleh AI:')
+display(pd.DataFrame({
+    'Diagnosis Asli Dokter': y_test.values[misclassified_idx], 
+    'Tebakan AI': y_pred_tuned[misclassified_idx]
+}).head())
+
+cm = confusion_matrix(y_test, y_pred_tuned)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot(cmap='Blues')
+plt.title('Confusion Matrix (Tuned Model)')
+plt.show()
+ 
+if hasattr(best_rf, 'feature_importances_'):
+    feature_names = [f'PC{i+1}' for i in range(len(best_rf.feature_importances_))]
+    feat_imp = pd.Series(best_rf.feature_importances_, index=feature_names)
+    feat_imp.sort_values(ascending=True).plot(kind='barh', figsize=(10, 6), colormap='viridis')
+    plt.title('Faktor Paling Mempengaruhi Diabetes (Tuned Model)')
+    plt.xlabel('Tingkat Kepentingan (Importance Score)')
+    plt.show()
+else:
+    print('Model tidak memiliki atribut feature_importances_.')
+ 
+model_path = os.path.join(os.getcwd(), 'random_forest_diabetes_best.pkl')
+joblib.dump(best_rf, model_path)
+print(f'SUCCESS! Model disimpan di:\n{model_path}')
+
+--------------------------------------------------
+=== Cell 35 (markdown) ===
+## XGBoost: Baseline dan Hyperparameter Tuning
+Membandingkan performa XGBoost dengan Random Forest untuk mendapatkan hasil optimal
+--------------------------------------------------
+=== Cell 36 (code) ===
+print("1. XGBOOST BASELINE MODEL (Default Parameters)")
+
+X_train_xgb = X_train.copy()
+X_test_xgb = X_test.copy()
+
+xgb_baseline = xgb.XGBClassifier(
+    random_state=42,
+    use_label_encoder=False,
+    eval_metric='logloss',
+    verbosity=0,
+    scale_pos_weight=1  
+)
+
+xgb_baseline.fit(X_train_xgb, y_train)
+
+y_pred_xgb_baseline = xgb_baseline.predict(X_test_xgb)
+xgb_baseline_accuracy = accuracy_score(y_test, y_pred_xgb_baseline)
+xgb_baseline_cv = cross_val_score(xgb_baseline, X_train_xgb, y_train, cv=3, scoring='accuracy', n_jobs=-1)
+
+print(f"Test Accuracy (XGBoost Baseline): {xgb_baseline_accuracy:.4f}")
+print(f"CV Accuracy (XGBoost Baseline): {xgb_baseline_cv.mean():.4f} (+/- {xgb_baseline_cv.std():.4f})")
+print(f"ROC AUC Score: {roc_auc_score(y_test, xgb_baseline.predict_proba(X_test_xgb)[:,1]):.4f}")
+print(f"\nClassification Report (XGBoost Baseline):")
+print(classification_report(y_test, y_pred_xgb_baseline))
+print()
+
+--------------------------------------------------
+=== Cell 37 (markdown) ===
+## (RandomizedSearchCV)
+--------------------------------------------------
+=== Cell 38 (code) ===
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import randint, uniform
+
+print("XGBOOST OPTIMIZED - MENGGUNAKAN RANDOMIZEDSEARCHCV")
+print("="*70)
+
+X_train_xgb_opt = X_train.copy()
+X_test_xgb_opt = X_test.copy()
+
+print("\nXGBoost Baseline (Quick Reference)")
+print("-" * 70)
+
+xgb_baseline_opt = xgb.XGBClassifier(
+    random_state=42,
+    use_label_encoder=False,
+    eval_metric='logloss',
+    n_jobs=-1,
+    verbosity=0
+)
+
+xgb_baseline_opt.fit(X_train_xgb_opt, y_train)
+y_pred_xgb_baseline_opt = xgb_baseline_opt.predict(X_test_xgb_opt)
+xgb_baseline_accuracy_opt = accuracy_score(y_test, y_pred_xgb_baseline_opt)
+
+print(f"Baseline Test Accuracy: {xgb_baseline_accuracy_opt:.4f}")
+
+print("\nHyperparameter Tuning dengan RandomizedSearchCV")
+print("-" * 70)
+
+xgb_param_dist_opt = {
+    'n_estimators': [100, 150, 200, 250],
+    'max_depth': [4, 5, 6, 7, 8],
+    'learning_rate': [0.01, 0.05, 0.1, 0.15],
+    'subsample': [0.7, 0.8, 0.9, 1.0],
+    'colsample_bytree': [0.7, 0.8, 0.9, 1.0],
+}
+
+xgb_model_opt = xgb.XGBClassifier(
+    random_state=42,
+    use_label_encoder=False,
+    eval_metric='logloss',
+    n_jobs=-1,
+    verbosity=0
+)
+
+xgb_random_search_opt = RandomizedSearchCV(
+    estimator=xgb_model_opt,
+    param_distributions=xgb_param_dist_opt,
+    n_iter=20,  
+    cv=3,
+    scoring='f1',
+    n_jobs=-1,
+    verbose=1,
+    random_state=42
+)
+
+print("Training RandomizedSearchCV (20 iterasi, 60 model fits)...\n")
+xgb_random_search_opt.fit(X_train_xgb_opt, y_train)
+
+print(f"\nBest Parameters: {xgb_random_search_opt.best_params_}")
+print(f"Best CV Score (F1): {xgb_random_search_opt.best_score_:.4f}")
+
+print("\nXGBoost Tuned Model (Setelah Hyperparameter Tuning)")
+print("-" * 70)
+
+best_xgb_opt = xgb_random_search_opt.best_estimator_
+y_pred_xgb_tuned_opt = best_xgb_opt.predict(X_test_xgb_opt)
+xgb_tuned_accuracy_opt = accuracy_score(y_test, y_pred_xgb_tuned_opt)
+xgb_tuned_cv_opt = cross_val_score(best_xgb_opt, X_train_xgb_opt, y_train, cv=3, scoring='accuracy', n_jobs=-1)
+
+print(f"Test Accuracy (Tuned): {xgb_tuned_accuracy_opt:.4f}")
+print(f"CV Score: {xgb_tuned_cv_opt.mean():.4f} (+/- {xgb_tuned_cv_opt.std():.4f})")
+print(f"ROC AUC: {roc_auc_score(y_test, best_xgb_opt.predict_proba(X_test_xgb_opt)[:,1]):.4f}")
+
+print(f"\nConfusion Matrix:")
+cm_xgb_opt = confusion_matrix(y_test, y_pred_xgb_tuned_opt)
+print(cm_xgb_opt)
+
+print(f"\nClassification Report:")
+print(classification_report(y_test, y_pred_xgb_tuned_opt))
+
+improvement_opt = ((xgb_tuned_accuracy_opt - xgb_baseline_accuracy_opt) / xgb_baseline_accuracy_opt) * 100
+print(f"\n Improvement: {improvement_opt:+.2f}%")
+
+--------------------------------------------------
+=== Cell 39 (markdown) ===
+Perbandingan
+--------------------------------------------------
+=== Cell 40 (code) ===
+
+print("RANDOM FOREST VS XGBOOST OPTIMIZED")
+
+try:
+    X_train
+    X_test
+    y_train
+    y_test
+except NameError:
+    raise NameError("Data X_train, X_test, y_train, atau y_test tidak ditemukan di environment. Pastikan sel preprocessing data telah dijalankan.")
+
+if 'X_selected_test' in globals() and 'X_selected_train' in globals():
+    X_test_rf = X_selected_test
+    X_train_rf = X_selected_train
+    print("Menggunakan X_selected_test & X_selected_train untuk Random Forest (fitur terseleksi).")
+elif 'X_test_final' in globals() and 'X_train_final' in globals():
+    X_test_rf = X_test_final
+    X_train_rf = X_train_final
+    print("Menggunakan X_test_final & X_train_final untuk Random Forest.")
+else:
+    X_test_rf = X_test.copy()
+    X_train_rf = X_train.copy()
+    print("Menggunakan X_test & X_train asli untuk Random Forest.")
+
+if 'X_test_xgb_opt' in globals() and 'X_train_xgb_opt' in globals():
+    X_test_xgb = X_test_xgb_opt
+    X_train_xgb = X_train_xgb_opt
+    print("Menggunakan X_test_xgb_opt & X_train_xgb_opt untuk XGBoost.")
+else:
+    X_test_xgb = X_test.copy()
+    X_train_xgb = X_train.copy()
+    print("Menggunakan X_test & X_train asli untuk XGBoost.")
+
+if 'best_rf' in globals():
+    rf_model = best_rf
+    print("Menggunakan model 'best_rf' yang aktif di memori.")
+else:
+    rf_files = ['random_forest_diabetes_best.pkl', 'random_forest_diabetes_tuned.pkl', 'random_forest_diabetes.pkl']
+    rf_model = None
+    for file in rf_files:
+        if os.path.exists(file):
+            rf_model = joblib.load(file)
+            print(f" Model Random Forest di-load dari file: '{file}'")
+            break
+    if rf_model is None:
+        raise FileNotFoundError("Model Random Forest tidak ditemukan di memori RAM atau file lokal")
+
+if 'best_xgb_opt' in globals():
+    xgb_model = best_xgb_opt
+    print("Menggunakan model 'best_xgb_opt' dari hasil RandomizedSearchCV.")
+elif 'xgb_random_search_opt' in globals() and hasattr(xgb_random_search_opt, 'best_estimator_'):
+    xgb_model = xgb_random_search_opt.best_estimator_
+    print("Menggunakan model best_estimator_ dari xgb_random_search_opt.")
+else:
+    xgb_files = ['xgboost_diabetes_best.json', 'xgboost_diabetes_tuned.json', 'xgboost_diabetes.json']
+    xgb_model = None
+    for file in xgb_files:
+        if os.path.exists(file):
+            xgb_model = xgb.XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss', n_jobs=-1, verbosity=0)
+            xgb_model.load_model(file)
+            print(f"Model XGBoost di-load dari file: '{file}'")
+            break
+    if xgb_model is None:
+        raise FileNotFoundError("Model XGBoost tidak ditemukan di memori RAM atau file lokal (.json). Harap jalankan kembali sel pelatihan XGBoost.")
+
+print("\nMenghitung metrik klasifikasi untuk kedua model")
+
+# Prediksi Random Forest
+y_pred_rf = rf_model.predict(X_test_rf)
+y_prob_rf = rf_model.predict_proba(X_test_rf)[:, 1]
+acc_rf = accuracy_score(y_test, y_pred_rf)
+f1_rf = f1_score(y_test, y_pred_rf)
+prec_rf = precision_score(y_test, y_pred_rf)
+rec_rf = recall_score(y_test, y_pred_rf)
+roc_rf = roc_auc_score(y_test, y_prob_rf)
+
+# Prediksi XGBoost
+y_pred_xgb = xgb_model.predict(X_test_xgb)
+y_prob_xgb = xgb_model.predict_proba(X_test_xgb)[:, 1]
+acc_xgb = accuracy_score(y_test, y_pred_xgb)
+f1_xgb = f1_score(y_test, y_pred_xgb)
+prec_xgb = precision_score(y_test, y_pred_xgb)
+rec_xgb = recall_score(y_test, y_pred_xgb)
+roc_xgb = roc_auc_score(y_test, y_prob_xgb)
+
+print("Menghitung skor Cross-Validation")
+cv_rf = cross_val_score(rf_model, X_train_rf, y_train, cv=3, scoring='accuracy', n_jobs=-1)
+cv_xgb = cross_val_score(xgb_model, X_train_xgb, y_train, cv=3, scoring='accuracy', n_jobs=-1)
+
+comparison_data = {
+    'Metrik Evaluasi': [
+        'Test Accuracy (Akurasi Uji)',
+        'F1-Score (Test)',
+        'Precision (Presisi)',
+        'Recall (Sensitivitas)',
+        'ROC AUC Score',
+        'CV Accuracy (Mean)',
+        'CV Accuracy (Std)'
+    ],
+    'Random Forest (Tuned)': [
+        f"{acc_rf:.4f}",
+        f"{f1_rf:.4f}",
+        f"{prec_rf:.4f}",
+        f"{rec_rf:.4f}",
+        f"{roc_rf:.4f}",
+        f"{cv_rf.mean():.4f}",
+        f"{cv_rf.std():.4f}"
+    ],
+    'XGBoost (Tuned)': [
+        f"{acc_xgb:.4f}",
+        f"{f1_xgb:.4f}",
+        f"{prec_xgb:.4f}",
+        f"{rec_xgb:.4f}",
+        f"{roc_xgb:.4f}",
+        f"{cv_xgb.mean():.4f}",
+        f"{cv_xgb.std():.4f}"
+    ]
+}
+
+comparison_df = pd.DataFrame(comparison_data)
+print("\n" + "="*70)
+print("TABEL RINGKASAN METRIK EVALUASI")
+print("="*70)
+display(comparison_df)
+
+print("\n" + "-"*70)
+print("CLASSIFICATION REPORT - RANDOM FOREST (TUNED)")
+print("-"*70)
+print(classification_report(y_test, y_pred_rf))
+
+print("\n" + "-"*70)
+print("CLASSIFICATION REPORT - XGBOOST (TUNED)")
+print("-"*70)
+print(classification_report(y_test, y_pred_xgb))
+
+# Visualisasi
+# Plot Confusion Matrix
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+cm_rf = confusion_matrix(y_test, y_pred_rf)
+disp_rf = ConfusionMatrixDisplay(confusion_matrix=cm_rf, display_labels=['Sehat (0)', 'Diabetes (1)'])
+disp_rf.plot(ax=axes[0], cmap='Blues', values_format='d')
+axes[0].set_title('Confusion Matrix: Random Forest (Tuned)', fontsize=12, fontweight='bold')
+
+cm_xgb = confusion_matrix(y_test, y_pred_xgb)
+disp_xgb = ConfusionMatrixDisplay(confusion_matrix=cm_xgb, display_labels=['Sehat (0)', 'Diabetes (1)'])
+disp_xgb.plot(ax=axes[1], cmap='Oranges', values_format='d')
+axes[1].set_title('Confusion Matrix: XGBoost (Tuned)', fontsize=12, fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+# Plot Kurva Perbandingan ROC
+fpr_rf, tpr_rf, _ = roc_curve(y_test, y_prob_rf)
+fpr_xgb, tpr_xgb, _ = roc_curve(y_test, y_prob_xgb)
+
+plt.figure(figsize=(10, 7))
+plt.plot(fpr_rf, tpr_rf, label=f'Random Forest (AUC = {roc_rf:.4f})', color='royalblue', lw=2)
+plt.plot(fpr_xgb, tpr_xgb, label=f'XGBoost (AUC = {roc_xgb:.4f})', color='darkorange', lw=2)
+plt.plot([0, 1], [0, 1], 'k--', lw=1.5, label='Random Guess (AUC = 0.5000)')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate (FPR)', fontsize=11)
+plt.ylabel('True Positive Rate (TPR / Recall)', fontsize=11)
+plt.title('Kurva ROC (Receiver Operating Characteristic) - Perbandingan Model', fontsize=13, fontweight='bold')
+plt.legend(loc="lower right", fontsize=10)
+plt.grid(alpha=0.3)
+plt.show()
+
+print("ANALISIS & REKOMENDASI")
+
+diff_acc = abs(acc_xgb - acc_rf) * 100
+diff_f1 = abs(f1_xgb - f1_rf) * 100
+
+best_model = "XGBoost" if f1_xgb > f1_rf else "Random Forest"
+worse_model = "Random Forest" if best_model == "XGBoost" else "XGBoost"
+
+print(f"Akurasi Uji: XGBoost ({acc_xgb:.4f}) vs Random Forest ({acc_rf:.4f})")
+print(f"F1-Score   : XGBoost ({f1_xgb:.4f}) vs Random Forest ({f1_rf:.4f})")
+print(f"ROC AUC Score: XGBoost ({roc_xgb:.4f}) vs Random Forest ({roc_rf:.4f})")
+
+print(f"\nKESIMPULAN:")
+if best_model == "XGBoost":
+    print(f"XGBoost (Tuned) merupakan model terbaik karena memiliki F1-score {diff_f1:.2f}% lebih tinggi dari Random Forest.")
+    print("XGBoost menunjukkan recall yang sangat baik, yang krusial untuk deteksi dini penyakit diabetes agar meminimalkan false negatives.")
+else:
+    print(f"Random Forest (Tuned) merupakan model terbaik karena memiliki F1-score {diff_f1:.2f}% lebih tinggi dari XGBoost.")
+    print("Random Forest menunjukkan performa seimbang antara kelas Sehat dan Diabetes pada dataset ini.")
+
+try:
+    if best_model == "XGBoost":
+        xgb_model.save_model('xgboost_diabetes_tuned.json')
+        print("\nModel terbaik (XGBoost) disimpan sebagai 'xgboost_diabetes_tuned.json'")
+    else:
+        joblib.dump(rf_model, 'random_forest_diabetes_tuned.pkl')
+        print("\nModel terbaik (Random Forest) disimpan sebagai 'random_forest_diabetes_tuned.pkl'")
+except Exception as e:
+    print(f"\nGagal menyimpan model terbaik: {e}")
+
+--------------------------------------------------
+=== Cell 41 (markdown) ===
+## REKOMENDASI 
+--------------------------------------------------
+=== Cell 42 (code) ===
+import os
+import pandas as pd
+import numpy as np
+import joblib
+import xgboost as xgb
+from sklearn.metrics import roc_auc_score, accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import cross_val_score
+
+print("="*80)
+print("?? MENYIAPKAN PERBANDINGAN MODEL RANDOM FOREST vs XGBOOST")
+print("="*80)
+
+# 1. Pastikan data tersedia untuk kedua model
+try:
+    X_train
+    X_test
+    y_train
+    y_test
+except NameError as e:
+    raise NameError("X_train/X_test/y_train/y_test belum terdefinisi. Jalankan sel preprocessing/data terlebih dahulu.") from e
+
+if 'selected_features' in globals():
+    try:
+        X_train_final = X_train[selected_features]
+        X_test_final = X_test[selected_features]
+        print('Menggunakan selected_features.')
+    except Exception:
+        print('selected_features ada tetapi tidak cocok; menggunakan semua fitur.')
+        X_train_final = X_train.copy()
+        X_test_final = X_test.copy()
+else:
+    print('selected_features tidak ada; menggunakan semua fitur.')
+    X_train_final = X_train.copy()
+    X_test_final = X_test.copy()
+
+if 'X_train_xgb_opt' in globals() and 'X_test_xgb_opt' in globals():
+    print('Menggunakan XGBoost data yang sudah ada.')
+else:
+    X_train_xgb_opt = X_train.copy()
+    X_test_xgb_opt = X_test.copy()
+    print('XGBoost data tidak terdefinisi, menggunakan X_train/X_test asli.')
+
+# 2. Pastikan model Random Forest tersedia
+if 'best_rf' in globals():
+    print('Menggunakan best_rf yang sudah ada.')
+else:
+    model_path = 'random_forest_diabetes_best.pkl'
+    if os.path.exists(model_path):
+        best_rf = joblib.load(model_path)
+        print(f'best_rf di-load dari {model_path}.')
+    else:
+        print('best_rf tidak ditemukan, melatih Random Forest cepat sebagai fallback.')
+        from sklearn.ensemble import RandomForestClassifier
+        best_rf = RandomForestClassifier(random_state=42, class_weight='balanced', n_jobs=-1)
+        best_rf.fit(X_train_final, y_train)
+
+# 3. Pastikan model XGBoost tersedia
+if 'best_xgb_opt' in globals():
+    print('Menggunakan best_xgb_opt yang sudah ada.')
+else:
+    model_path = 'xgboost_diabetes_best.json'
+    if os.path.exists(model_path):
+        best_xgb_opt = xgb.XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss', verbosity=0, n_jobs=-1)
+        best_xgb_opt.load_model(model_path)
+        print(f'best_xgb_opt di-load dari {model_path}.')
+    else:
+        print('best_xgb_opt tidak ditemukan, melatih XGBoost baseline sebagai fallback.')
+        best_xgb_opt = xgb.XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss', verbosity=0, n_jobs=-1)
+        best_xgb_opt.fit(X_train_xgb_opt, y_train)
+
+# 4. Hitung metrik menggunakan data test saja
+try:
+    y_pred_rf = best_rf.predict(X_test_final)
+    baseline_accuracy = accuracy_score(y_test, y_pred_rf)
+    roc_auc_rf_final = roc_auc_score(y_test, best_rf.predict_proba(X_test_final)[:,1])
+except Exception as e:
+    raise RuntimeError(f'Error saat prediksi dengan Random Forest: {e}') from e
+
+try:
+    y_pred_xgb = best_xgb_opt.predict(X_test_xgb_opt)
+    xgb_tuned_accuracy_opt = accuracy_score(y_test, y_pred_xgb)
+    roc_auc_xgb_final = roc_auc_score(y_test, best_xgb_opt.predict_proba(X_test_xgb_opt)[:,1])
+except Exception as e:
+    raise RuntimeError(f'Error saat prediksi dengan XGBoost: {e}') from e
+
+# 5. Optional: hitung CV jika ingin, tetapi bisa lama
+try:
+    tuned_cv = cross_val_score(best_rf, X_train_final, y_train, cv=3, scoring='accuracy', n_jobs=1)
+except Exception as e:
+    print('CV Random Forest gagal:', e)
+    tuned_cv = np.array([np.nan])
+
+try:
+    xgb_tuned_cv_opt = cross_val_score(best_xgb_opt, X_train_xgb_opt, y_train, cv=3, scoring='accuracy', n_jobs=1)
+except Exception as e:
+    print('CV XGBoost gagal:', e)
+    xgb_tuned_cv_opt = np.array([np.nan])
+
+improvement_opt = ((xgb_tuned_accuracy_opt - baseline_accuracy) / baseline_accuracy * 100) if baseline_accuracy != 0 else np.nan
+
+comparison_table = pd.DataFrame({
+    'Metrik': [
+        'Test Accuracy',
+        'CV Score (Mean)',
+        'CV Score (Std)',
+        'ROC AUC',
+        'Improvement %'
+    ],
+    'Random Forest': [
+        f"{baseline_accuracy:.4f}",
+        f"{np.nanmean(tuned_cv):.4f}",
+        f"{np.nanstd(tuned_cv):.4f}",
+        f"{roc_auc_rf_final:.4f}",
+        '-'
+    ],
+    'XGBoost': [
+        f"{xgb_tuned_accuracy_opt:.4f}",
+        f"{np.nanmean(xgb_tuned_cv_opt):.4f}",
+        f"{np.nanstd(xgb_tuned_cv_opt):.4f}",
+        f"{roc_auc_xgb_final:.4f}",
+        f"{improvement_opt:+.2f}%"
+    ]
+})
+
+print('
+' + comparison_table.to_string(index=False))
+
+print('
+' + '='*80)
+print('?? ANALISIS & REKOMENDASI')
+print('='*80)
+
+if baseline_accuracy > xgb_tuned_accuracy_opt:
+    best_model = 'Random Forest'
+    accuracy_diff = (baseline_accuracy - xgb_tuned_accuracy_opt) * 100
+    print(f"
+? MODEL TERBAIK: RANDOM FOREST")
+    print(f"   Akurasi: {baseline_accuracy:.4f} (Lebih tinggi {accuracy_diff:.2f}% dari XGBoost)")
+else:
+    best_model = 'XGBoost'
+    accuracy_diff = (xgb_tuned_accuracy_opt - baseline_accuracy) * 100
+    print(f"
+? MODEL TERBAIK: XGBOOST")
+    print(f"   Akurasi: {xgb_tuned_accuracy_opt:.4f} (Lebih tinggi {accuracy_diff:.2f}% dari Random Forest)")
+
+if np.isnan(tuned_cv).all():
+    print('
+?? CV score Random Forest tidak tersedia.')
+if np.isnan(xgb_tuned_cv_opt).all():
+    print('?? CV score XGBoost tidak tersedia.')
+
+roc_winner = 'Random Forest' if roc_auc_rf_final > roc_auc_xgb_final else 'XGBoost'
+print(f"
+ROC AUC Winner: {roc_winner}")
+
+print('
+?? REKOMENDASI PENGGUNAAN:')
+print('-' * 80)
+
+if best_model == 'Random Forest':
+    print(f"
+? GUNAKAN: RANDOM FOREST
+   - Akurasi lebih tinggi ({baseline_accuracy:.4f})
+   - ROC AUC: {roc_auc_rf_final:.4f}
+   
+   Kelebihan:
+   - Interpretabilitas lebih baik
+   - Tidak sensitif terhadap outlier
+   - Training berskala lebih sederhana
+")
+else:
+    print(f"
+? GUNAKAN: XGBOOST
+   - Akurasi lebih tinggi ({xgb_tuned_accuracy_opt:.4f})
+   - ROC AUC: {roc_auc_xgb_final:.4f}
+   
+   Kelebihan:
+   - Gradient boosting lebih kuat untuk pola kompleks
+   - Regularisasi internal membantu kurangi overfitting
+")
+
+print('='*80 + '
+')
+
+print('?? MENYIMPAN KEDUA MODEL:')
+print('-' * 80)
+joblib.dump(best_rf, 'random_forest_diabetes_best.pkl')
+print('? Random Forest tersimpan: random_forest_diabetes_best.pkl')
+try:
+    best_xgb_opt.save_model('xgboost_diabetes_best.json')
+    print('? XGBoost tersimpan: xgboost_diabetes_best.json')
+except Exception as e:
+    print('?? XGBoost tidak bisa disimpan:', e)
+--------------------------------------------------
+=== Cell 43 (code) ===
+# 3. XGBoost Model Setelah Tuning
+print("="*60)
+print("3. XGBOOST MODEL SETELAH TUNING (Tuned Performance)")
+print("="*60)
+
+# Get best model dari GridSearchCV XGBoost
+best_xgb = xgb_grid_search.best_estimator_
+
+# Prediksi dengan tuned model
+y_pred_xgb_tuned = best_xgb.predict(X_test_xgb)
+xgb_tuned_accuracy = accuracy_score(y_test, y_pred_xgb_tuned)
+
+# Cross validation score untuk tuned model
+xgb_tuned_cv = cross_val_score(best_xgb, X_train_xgb, y_train, cv=3, scoring='accuracy', n_jobs=-1)
+
+print(f"Test Accuracy (XGBoost Tuned): {xgb_tuned_accuracy:.4f}")
+print(f"CV Accuracy (XGBoost Tuned): {xgb_tuned_cv.mean():.4f} (+/- {xgb_tuned_cv.std():.4f})")
+print(f"ROC AUC Score: {roc_auc_score(y_test, best_xgb.predict_proba(X_test_xgb)[:,1]):.4f}")
+
+print(f"\nConfusion Matrix (XGBoost Tuned):")
+print(confusion_matrix(y_test, y_pred_xgb_tuned))
+
+print(f"\nClassification Report (XGBoost Tuned):")
+print(classification_report(y_test, y_pred_xgb_tuned))
+
+# Ringkasan peningkatan
+xgb_improvement = ((xgb_tuned_accuracy - xgb_baseline_accuracy) / xgb_baseline_accuracy) * 100
+print(f"\nRingkasan XGBoost: Ada perubahan akurasi sebesar {xgb_improvement:+.2f}% setelah tuning.")
+
+--------------------------------------------------
+=== Cell 44 (markdown) ===
+## Perbandingan Lengkap: Random Forest vs XGBoost
+Analisis mendalam tentang performa kedua algoritma untuk menentukan model terbaik
+--------------------------------------------------
+=== Cell 45 (code) ===
+# Perbandingan Komprehensif antara Random Forest dan XGBoost
+print("\n" + "="*80)
+print("PERBANDINGAN KOMPREHENSIF: RANDOM FOREST vs XGBOOST")
+print("="*80)
+
+# Buat DataFrame untuk perbandingan
+comparison_data = {
+    'Metrik': ['Baseline Accuracy', 'Tuned Accuracy', 'CV Accuracy (Mean)', 'CV Accuracy (Std)',
+               'ROC AUC Score', 'Improvement (%)'],
+    'Random Forest': [
+        f"{baseline_accuracy:.4f}",
+        f"{tuned_accuracy:.4f}",
+        f"{tuned_cv.mean():.4f}",
+        f"{tuned_cv.std():.4f}",
+        f"{roc_auc_score(y_test, best_rf.predict_proba(X_selected_test)[:,1]):.4f}",
+        f"{((tuned_accuracy - baseline_accuracy) / baseline_accuracy * 100):+.2f}%"
+    ],
+    'XGBoost': [
+        f"{xgb_baseline_accuracy:.4f}",
+        f"{xgb_tuned_accuracy:.4f}",
+        f"{xgb_tuned_cv.mean():.4f}",
+        f"{xgb_tuned_cv.std():.4f}",
+        f"{roc_auc_score(y_test, best_xgb.predict_proba(X_test_xgb)[:,1]):.4f}",
+        f"{xgb_improvement:+.2f}%"
+    ]
+}
+
+comparison_df = pd.DataFrame(comparison_data)
+print("\n" + comparison_df.to_string(index=False))
+
+print("\n" + "="*80)
+print("KESIMPULAN:")
+print("="*80)
+
+if tuned_accuracy > xgb_tuned_accuracy:
+    print(f"✓ RANDOM FOREST memiliki akurasi lebih tinggi: {tuned_accuracy:.4f} vs {xgb_tuned_accuracy:.4f}")
+    print(f"  Selisih akurasi: {(tuned_accuracy - xgb_tuned_accuracy)*100:+.2f}%")
+else:
+    print(f"✓ XGBOOST memiliki akurasi lebih tinggi: {xgb_tuned_accuracy:.4f} vs {tuned_accuracy:.4f}")
+    print(f"  Selisih akurasi: {(xgb_tuned_accuracy - tuned_accuracy)*100:+.2f}%")
+
+print(f"\nRandom Forest CV Mean: {tuned_cv.mean():.4f}")
+print(f"XGBoost CV Mean: {xgb_tuned_cv.mean():.4f}")
+print("\n✓ Rekomendasi: Gunakan model dengan akurasi dan CV score tertinggi untuk prediksi final.")
+print("="*80 + "\n")
+
+--------------------------------------------------
+=== Cell 46 (code) ===
+# Visualisasi Perbandingan Kedua Model
+import matplotlib.pyplot as plt
+import numpy as np
+
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+fig.suptitle('Perbandingan Random Forest vs XGBoost', fontsize=16, fontweight='bold')
+
+# 1. Perbandingan Akurasi
+metrics = ['Baseline', 'Tuned', 'CV Mean']
+rf_scores = [baseline_accuracy, tuned_accuracy, tuned_cv.mean()]
+xgb_scores = [xgb_baseline_accuracy, xgb_tuned_accuracy, xgb_tuned_cv.mean()]
+
+x = np.arange(len(metrics))
+width = 0.35
+
+ax1 = axes[0, 0]
+ax1.bar(x - width/2, rf_scores, width, label='Random Forest', alpha=0.8, color='#1f77b4')
+ax1.bar(x + width/2, xgb_scores, width, label='XGBoost', alpha=0.8, color='#ff7f0e')
+ax1.set_ylabel('Accuracy Score', fontweight='bold')
+ax1.set_title('Perbandingan Accuracy')
+ax1.set_xticks(x)
+ax1.set_xticklabels(metrics)
+ax1.legend()
+ax1.grid(axis='y', alpha=0.3)
+
+# 2. Confusion Matrix - Random Forest
+cm_rf = confusion_matrix(y_test, y_pred_tuned)
+ax2 = axes[0, 1]
+im = ax2.imshow(cm_rf, cmap='Blues', aspect='auto')
+ax2.set_title('Confusion Matrix - Random Forest')
+ax2.set_ylabel('True Label')
+ax2.set_xlabel('Predicted Label')
+for i in range(2):
+    for j in range(2):
+        ax2.text(j, i, str(cm_rf[i, j]), ha='center', va='center', color='white' if cm_rf[i, j] > cm_rf.max()/2 else 'black')
+plt.colorbar(im, ax=ax2)
+
+# 3. Confusion Matrix - XGBoost
+cm_xgb = confusion_matrix(y_test, y_pred_xgb_tuned)
+ax3 = axes[1, 0]
+im = ax3.imshow(cm_xgb, cmap='Oranges', aspect='auto')
+ax3.set_title('Confusion Matrix - XGBoost')
+ax3.set_ylabel('True Label')
+ax3.set_xlabel('Predicted Label')
+for i in range(2):
+    for j in range(2):
+        ax3.text(j, i, str(cm_xgb[i, j]), ha='center', va='center', color='white' if cm_xgb[i, j] > cm_xgb.max()/2 else 'black')
+plt.colorbar(im, ax=ax3)
+
+# 4. ROC AUC Comparison
+roc_auc_rf = roc_auc_score(y_test, best_rf.predict_proba(X_selected_test)[:,1])
+roc_auc_xgb = roc_auc_score(y_test, best_xgb.predict_proba(X_test_xgb)[:,1])
+
+models = ['Random Forest', 'XGBoost']
+roc_scores = [roc_auc_rf, roc_auc_xgb]
+colors = ['#1f77b4', '#ff7f0e']
+
+ax4 = axes[1, 1]
+bars = ax4.bar(models, roc_scores, color=colors, alpha=0.8)
+ax4.set_ylabel('ROC AUC Score', fontweight='bold')
+ax4.set_title('Perbandingan ROC AUC Score')
+ax4.set_ylim([0, 1])
+ax4.grid(axis='y', alpha=0.3)
+
+# Add value labels on bars
+for bar in bars:
+    height = bar.get_height()
+    ax4.text(bar.get_x() + bar.get_width()/2., height,
+            f'{height:.4f}', ha='center', va='bottom', fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print("✓ Visualisasi perbandingan berhasil ditampilkan!")
+
+--------------------------------------------------
+=== Cell 47 (code) ===
+# Feature Importance Comparison antara Random Forest dan XGBoost
+fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+fig.suptitle('Feature Importance: Random Forest vs XGBoost', fontsize=14, fontweight='bold')
+
+# Feature Importance - Random Forest
+if hasattr(best_rf, 'feature_importances_'):
+    rf_importances = pd.Series(best_rf.feature_importances_, index=X_selected_test.columns)
+    rf_importances = rf_importances.sort_values(ascending=True).tail(15)
+    ax1 = axes[0]
+    rf_importances.plot(kind='barh', ax=ax1, color='#1f77b4', alpha=0.8)
+    ax1.set_title('Feature Importance - Random Forest', fontweight='bold')
+    ax1.set_xlabel('Importance Score')
+
+# Feature Importance - XGBoost
+if hasattr(best_xgb, 'feature_importances_'):
+    xgb_importances = pd.Series(best_xgb.feature_importances_, index=X_test_xgb.columns)
+    xgb_importances = xgb_importances.sort_values(ascending=True).tail(15)
+    ax2 = axes[1]
+    xgb_importances.plot(kind='barh', ax=ax2, color='#ff7f0e', alpha=0.8)
+    ax2.set_title('Feature Importance - XGBoost', fontweight='bold')
+    ax2.set_xlabel('Importance Score')
+
+plt.tight_layout()
+plt.show()
+
+print("✓ Feature Importance comparison berhasil ditampilkan!")
+
+--------------------------------------------------
+=== Cell 48 (code) ===
+# Simpan Kedua Model Terbaik
+print("\n" + "="*60)
+print("MENYIMPAN MODELS")
+print("="*60)
+
+# Simpan Random Forest Tuned Model
+joblib.dump(best_rf, 'random_forest_diabetes_tuned.pkl')
+print("✓ Random Forest tuned model berhasil disimpan sebagai 'random_forest_diabetes_tuned.pkl'")
+
+# Simpan XGBoost Tuned Model
+best_xgb.save_model('xgboost_diabetes_tuned.json')
+print("✓ XGBoost tuned model berhasil disimpan sebagai 'xgboost_diabetes_tuned.json'")
+
+# Simpan comparison results
+comparison_results = {
+    'random_forest': {
+        'baseline_accuracy': float(baseline_accuracy),
+        'tuned_accuracy': float(tuned_accuracy),
+        'cv_mean': float(tuned_cv.mean()),
+        'cv_std': float(tuned_cv.std()),
+        'roc_auc': float(roc_auc_rf),
+        'best_params': grid_search.best_params_
+    },
+    'xgboost': {
+        'baseline_accuracy': float(xgb_baseline_accuracy),
+        'tuned_accuracy': float(xgb_tuned_accuracy),
+        'cv_mean': float(xgb_tuned_cv.mean()),
+        'cv_std': float(xgb_tuned_cv.std()),
+        'roc_auc': float(roc_auc_xgb),
+        'best_params': xgb_grid_search.best_params_
+    }
+}
+
+import json
+with open('model_comparison_results.json', 'w') as f:
+    json.dump(comparison_results, f, indent=4, default=str)
+print("✓ Hasil perbandingan model berhasil disimpan sebagai 'model_comparison_results.json'")
+
+print("\n✓ Semua model dan hasil telah disimpan dengan sukses!")
+print("="*60)
+
+--------------------------------------------------
