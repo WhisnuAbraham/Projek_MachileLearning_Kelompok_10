@@ -349,9 +349,50 @@ def main():
             
             st.markdown("<br/>", unsafe_allow_html=True)
             st.markdown("<h3 style='color:#1E293B; margin-top:10px; font-size:20px;'>📈 Data Biometrik</h3>", unsafe_allow_html=True)
+            
+            # --- Kalkulator BMI ---
+            st.markdown("""
+            <div style='background-color:#F0F4FA; border:1px dashed #93C5FD; border-radius:10px; padding:15px 20px; margin-bottom:15px;'>
+                <p style='margin:0; font-size:14px; font-weight:600; color:#1E3A5F;'>🔢 Tidak tahu BMI Anda? Gunakan kalkulator di bawah ini:</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.expander("📐 Buka Kalkulator BMI", expanded=False):
+                st.markdown("<p style='font-size:13px; color:#64748B; margin-bottom:10px;'>Masukkan tinggi dan berat badan Anda, BMI akan dihitung otomatis.</p>", unsafe_allow_html=True)
+                kalk_col1, kalk_col2 = st.columns(2)
+                with kalk_col1:
+                    tinggi_cm = st.number_input('Tinggi Badan (cm)', min_value=50.0, max_value=250.0, value=165.0, step=0.5, format='%.1f', key='tinggi_bmi')
+                with kalk_col2:
+                    berat_kg = st.number_input('Berat Badan (kg)', min_value=10.0, max_value=300.0, value=56.0, step=0.5, format='%.1f', key='berat_bmi')
+                
+                bmi_kalkulasi = berat_kg / ((tinggi_cm / 100) ** 2)
+                
+                # Kategori BMI
+                if bmi_kalkulasi < 18.5:
+                    kat_warna = "#3B82F6"
+                    kat_label = "Kurus (Underweight)"
+                elif bmi_kalkulasi < 25.0:
+                    kat_warna = "#22C55E"
+                    kat_label = "Normal"
+                elif bmi_kalkulasi < 30.0:
+                    kat_warna = "#F59E0B"
+                    kat_label = "Gemuk (Overweight)"
+                else:
+                    kat_warna = "#EF4444"
+                    kat_label = "Obesitas"
+                
+                st.markdown(f"""
+                <div style='background-color:#F8FAFC; border-radius:8px; padding:15px; text-align:center; border: 1px solid #E2E8F0; margin-top:10px;'>
+                    <p style='margin:0; font-size:13px; color:#64748B;'>Hasil BMI Anda</p>
+                    <h2 style='margin:5px 0; font-size:36px; color:{kat_warna}; font-weight:700;'>{bmi_kalkulasi:.2f}</h2>
+                    <span style='background-color:{kat_warna}20; color:{kat_warna}; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:600;'>{kat_label}</span>
+                    <p style='margin-top:10px; font-size:12px; color:#94A3B8;'>Nilai ini akan otomatis digunakan pada field BMI di bawah</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
             col5, col6, col7 = st.columns(3)
             with col5:
-                bmi = st.number_input('BMI', value=20.80, format='%.2f')
+                bmi = st.number_input('BMI', value=round(bmi_kalkulasi, 2) if 'bmi_kalkulasi' in dir() else 20.80, format='%.2f')
                 st.markdown("<div class='input-subtext'>Rentang normal: 18.5 - 24.9</div>", unsafe_allow_html=True)
             with col6:
                 hbA1c_level = st.number_input('Kadar HbA1c', value=5.60, format='%.2f')
@@ -360,6 +401,7 @@ def main():
                 blood_glucose_level = st.number_input('Kadar Glukosa Darah', value=180.00, format='%.2f')
                 st.markdown("<div class='input-subtext'>mg/dL (puasa)</div>", unsafe_allow_html=True)
             
+
             st.markdown("<br/>", unsafe_allow_html=True)
             submit_col, clear_col, _ = st.columns([1.5, 1, 1.5])
             with submit_col:
