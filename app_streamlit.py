@@ -225,60 +225,13 @@ def render_sidebar():
     
     # Navigasi kustom
     st.sidebar.markdown("""
-        <div style='background-color:#1652C4; color:white; padding:10px 15px; border-radius:6px; margin-bottom:5px; font-weight:500; display:flex; align-items:center;'>
+        <div style='background-color:#1652C4; color:white; padding:10px 15px; border-radius:6px; margin-bottom:30px; font-weight:500; display:flex; align-items:center;'>
             📄 &nbsp; Prediktor
         </div>
-        <div style='color:#475569; padding:10px 15px; margin-bottom:5px; font-weight:500;'>
-            📊 &nbsp; Analitik
-        </div>
-        <div style='color:#475569; padding:10px 15px; margin-bottom:5px; font-weight:500;'>
-            🕒 &nbsp; Riwayat
-        </div>
-        <div style='color:#475569; padding:10px 15px; margin-bottom:30px; font-weight:500;'>
-            ❓ &nbsp; Bantuan
-        </div>
     """, unsafe_allow_html=True)
-    
-    st.sidebar.markdown("<hr style='border:1px solid #E2E8F0; margin-bottom:20px;'/>", unsafe_allow_html=True)
-    
-    st.sidebar.markdown("""
-        <div style='background-color:#E2E8F0; color:#0E429B; padding:10px 15px; border-radius:6px; margin-bottom:15px; font-weight:600; font-size:14px; text-align:center;'>
-            ⚙️ Pengaturan Model
-        </div>
-        <div style='color:#475569; padding:10px 15px; margin-bottom:5px; font-weight:500; font-size:14px;'>
-            ⚙️ &nbsp; Pengaturan
-        </div>
-        <div style='color:#475569; padding:10px 15px; margin-bottom:5px; font-weight:500; font-size:14px;'>
-            🚪 &nbsp; Keluar
-        </div>
-    """, unsafe_allow_html=True)
-
-def render_top_header():
-    col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 3, 2])
-    with col1:
-        st.markdown("<div style='padding-top:10px; font-weight:600; color:#0E429B; border-bottom: 2px solid #0E429B; display:inline-block; padding-bottom:5px;'>Dasbor</div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown("<div style='padding-top:10px; font-weight:500; color:#64748B;'>Daftar Pasien</div>", unsafe_allow_html=True)
-    with col3:
-        st.markdown("<div style='padding-top:10px; font-weight:500; color:#64748B;'>Protokol</div>", unsafe_allow_html=True)
-    with col4:
-        # spacer
-        pass
-    with col5:
-        subcol1, subcol2 = st.columns(2)
-        with subcol1:
-            st.markdown("<div class='outline-btn' style='padding-top:5px;'>", unsafe_allow_html=True)
-            st.button("Ekspor Data")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with subcol2:
-            st.markdown("<div style='padding-top:5px;'>", unsafe_allow_html=True)
-            st.button("Deploy Model")
-            st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("<hr style='border:1px solid #E2E8F0; margin-top:-10px; margin-bottom:30px;'/>", unsafe_allow_html=True)
 
 def main():
     render_sidebar()
-    render_top_header()
     
     # Load default models
     model_files = find_model_files()
@@ -298,19 +251,7 @@ def main():
         st.markdown("<h1 style='color:#0F172A; margin-bottom:5px;'>Prediksi Sampel Tunggal</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color:#64748B; font-size:15px; margin-bottom:30px; line-height:1.5;'>Masukkan data klinis pasien di bawah ini untuk menghasilkan penilaian risiko diabetes secara real-time berdasarkan model RF yang telah dilatih.</p>", unsafe_allow_html=True)
         
-        # Stepper
-        st.markdown("""
-        <div class='stepper-container'>
-            <div class='step-circle active'>1</div>
-            <div class='step-text active'>Data Pasien</div>
-            <div class='step-line'></div>
-            <div class='step-circle'>2</div>
-            <div class='step-text'>Verifikasi Data</div>
-            <div class='step-line'></div>
-            <div class='step-circle'>3</div>
-            <div class='step-text'>Analisis Risiko</div>
-        </div>
-        """, unsafe_allow_html=True)
+
         
         with st.form("prediction_form"):
             st.markdown("<h3 style='color:#1E293B; margin-top:20px; font-size:20px;'>🪪 Metadata Klinis</h3>", unsafe_allow_html=True)
@@ -462,33 +403,7 @@ def main():
                 except Exception as e:
                     st.error(f'Gagal melakukan prediksi: {e}')
 
-        # Unggah Model & Data
-        st.markdown("<div class='custom-card'>", unsafe_allow_html=True)
-        st.markdown("<h4 style='color:#1E293B; margin-top:0;'>Model & Data</h4>", unsafe_allow_html=True)
-        
-        st.markdown("<p style='font-size:13px; color:#475569; margin-bottom:5px;'>Unggah label_encoders (.pkl)</p>", unsafe_allow_html=True)
-        label_enc_file = st.file_uploader('', type=['pkl'], key='le_up')
-        
-        st.markdown("<p style='font-size:13px; color:#475569; margin-bottom:5px; margin-top:10px;'>Unggah dataset CSV (Opsional)</p>", unsafe_allow_html=True)
-        dataset_uploader = st.file_uploader('', type=['csv'], key='ds_up')
-        
-        st.markdown("<div class='blue-card' style='padding:10px; text-align:center; margin-top:15px; cursor:pointer;'>", unsafe_allow_html=True)
-        st.markdown("<span style='color:#0E429B; font-weight:600; font-size:14px;'>📺 Lihat Panduan Penggunaan</span>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Pemeriksaan Presisi
-        st.markdown("""
-        <div class='dark-card'>
-            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;'>
-                <h4 style='margin:0; font-size:15px;'>Pemeriksaan Presisi</h4>
-                <span style='font-size:18px;'>✔️</span>
-            </div>
-            <p style='font-size:13px; line-height:1.5; margin:0; opacity:0.9;'>
-                Model AI kami divalidasi menggunakan protokol klinis terkini untuk skrining Diabetes Tipe 2. Pastikan semua input biometrik telah diverifikasi dalam 24 jam terakhir untuk akurasi maksimal.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+
 
 
 if __name__ == '__main__':
