@@ -12,7 +12,7 @@ from sklearn.metrics import (
 
 st.set_page_config(page_title="DiaPredict AI Dashboard", layout="wide", initial_sidebar_state="expanded")
 
-# --- Custom CSS ---
+# -- Custom CSS --
 st.markdown("""
 <style>
     /* Google Fonts */
@@ -223,7 +223,7 @@ def render_sidebar():
         <br/>
     """, unsafe_allow_html=True)
     
-    # Navigasi kustom
+    # Navigasi Custom
     st.sidebar.markdown("""
         <div style='background-color:#1652C4; color:white; padding:10px 15px; border-radius:6px; margin-bottom:30px; font-weight:500; display:flex; align-items:center;'>
             📄 &nbsp; Prediktor
