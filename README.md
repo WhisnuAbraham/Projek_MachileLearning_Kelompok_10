@@ -1,4 +1,4 @@
-# DiaPredict AI — Kelompok 10
+# Machine Learning — Kelompok 10
 
 Aplikasi prediksi diabetes menggunakan Machine Learning (Random Forest).
 
