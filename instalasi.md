@@ -19,7 +19,7 @@ Dataset sudah tersedia secara publik dan akan otomatis diunduh saat notebook dij
 Install library yang dibutuhkan:
 
 ```
-pip install -r requirements.txt
+pip install streamlit scikit-learn pandas numpy joblib matplotlib seaborn xgboost imbalanced-learn
 ```
 
 Jalankan aplikasi:
@@ -35,7 +35,6 @@ Buka browser di: http://localhost:8501
 ## File yang Dibutuhkan
 
 - `app_streamlit.py` — aplikasi utama
-- `requirements.txt` — daftar library
 - `random_forest_diabetes_best.pkl` — model ML
 - `scaler.pkl` — normalisasi data
 - `pca.pkl` — reduksi dimensi
